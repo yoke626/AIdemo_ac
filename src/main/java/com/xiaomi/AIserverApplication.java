@@ -1,0 +1,13 @@
+package com.xiaomi;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AIserverApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(AIserverApplication.class, args);
+    }
+
+}

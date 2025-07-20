@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 客服问答</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: #f4f7f9;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* 左侧会话列表样式 */
+        .session-sidebar {
+            width: 300px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+        }
+        .session-header {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .session-header h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+        #new-session {
+            padding: 6px 12px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        #new-session:hover {
+            background-color: #2980b9;
+        }
+        .session-list {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        .session-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .session-item.active {
+            background-color: #e3f2fd;
+            border-left: 3px solid #3498db;
+        }
+        .session-item:hover {
+            background-color: #f1f3f5;
+        }
+        .session-name {
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .session-time {
+            font-size: 12px;
+            color: #868e96;
+        }
+        .no-sessions {
+            padding: 20px;
+            text-align: center;
+            color: #868e96;
+            font-style: italic;
+        }
+
+        /* 聊天区样式 */
+        .chat-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+            height: 100%;
+        }
+        .chat-header {
+            padding: 15px;
+            background-color: #3498db;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-header .nav-links {
+            font-size: 14px;
+        }
+        .chat-header a, .chat-header button {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .chat-header a:hover {
+            text-decoration: underline;
+        }
+        .chat-header button {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: inherit;
+        }
+        #chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+        }
+        .message {
+            margin-bottom: 15px;
+            max-width: 70%;
+            line-height: 1.5;
+            display: block;
+        }
+        .user-msg {
+            background-color: #2ecc71;
+            color: white;
+            border-radius: 15px 15px 0 15px;
+            padding: 10px 15px;
+            margin-left: auto;
+        }
+        .ai-msg {
+            background-color: #ecf0f1;
+            color: #333;
+            border-radius: 15px 15px 15px 0;
+            padding: 10px 15px;
+            margin-right: auto;
+        }
+        #chat-form {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #eee;
+        }
+        #question-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            outline: none;
+            font-size: 16px;
+        }
+        #chat-form button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            border: none;
+            background-color: #3498db;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #chat-form button:hover {
+            background-color: #2980b9;
+        }
+        .empty-state {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #868e96;
+            padding: 20px;
+            text-align: center;
+        }
+        .empty-state button {
+            margin-top: 20px;
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <!-- 左侧会话列表 -->
+    <div class="session-sidebar">
+        <div class="session-header">
+            <h2>会话列表</h2>
+            <button id="new-session">+ 新会话</button>
+        </div>
+        <div class="session-list" id="session-list">
+            <!-- 会话项将通过JS动态生成 -->
+        </div>
+    </div>
+
+    <!-- 右侧聊天区 -->
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>AI 客服</h1>
+            <div sec:authorize="isAuthenticated()" class="nav-links">
+                <span>欢迎, <strong sec:authentication="name">User</strong>!</span> |
+                <a th:href="@{/history}">查看问答历史</a> |
+                <a th:href="@{/knowledge}">知识库管理</a> |
+                <form th:action="@{/logout}" method="post" style="display:inline;">
+                    <button type="submit">注销</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 空状态提示（无会话时显示） -->
+        <div id="empty-state" class="empty-state" style="display: none;">
+            <h2>还没有活跃会话</h2>
+            <p>请点击左侧"新会话"按钮开始聊天</p>
+            <button onclick="createNewSession()">创建新会话</button>
+        </div>
+
+        <!-- 聊天内容区域（有会话时显示） -->
+        <div id="chat-box" style="display: none;">
+            <!-- 聊天内容将通过JS动态生成 -->
+        </div>
+
+        <!-- 输入区域（有会话时显示） -->
+        <form id="chat-form" style="display: none;">
+            <input type="text" id="question-input" placeholder="请输入你的问题..." autocomplete="off"/>
+            <button type="submit">发送</button>
+            <input type="hidden" id="current-session-id" value="" />
+        </form>
+    </div>
+</div>
+
+<script>
+    let currentSessionId = ''; // 当前会话ID
+    const sessionListEl = document.getElementById('session-list');
+    const chatBoxEl = document.getElementById('chat-box');
+    const chatFormEl = document.getElementById('chat-form');
+    const emptyStateEl = document.getElementById('empty-state');
+    const questionInputEl = document.getElementById('question-input');
+
+    // 页面加载时初始化
+    window.onload = () => {
+        loadSessions();
+        // 绑定新会话按钮事件
+        document.getElementById('new-session').addEventListener('click', createNewSession);
+        // 绑定表单提交事件
+        chatFormEl.addEventListener('submit', handleFormSubmit);
+    };
+
+    // 加载会话列表 - 核心修复点
+    function loadSessions() {
+        fetch('/sessions')
+            .then(res => {
+                if (!res.ok) throw new Error('会话加载失败');
+                return res.json();
+            })
+            .then(sessions => {
+                sessionListEl.innerHTML = '';
+
+                // 如果没有会话，显示提示信息
+                if (sessions.length === 0) {
+                    showEmptyState(true);
+                    return;
+                }
+
+                // 有会话时隐藏空状态
+                showEmptyState(false);
+
+                // 渲染会话列表
+                sessions.forEach(session => {
+                    const item = document.createElement('div');
+                    item.className = `session-item ${session.id === currentSessionId ? 'active' : ''}`;
+                    item.dataset.sessionId = session.id;
+                    // 确保会话名称正确显示
+                    const sessionName = session.sessionName || session.lastMessage || '新会话';
+                    item.innerHTML = `
+                        <div class="session-name">${escapeHtml(sessionName)}</div>
+                        <div class="session-time">${formatTime(session.updateTime)}</div>
+                    `;
+                    // 修复点击事件 - 使用箭头函数确保this指向正确
+                    item.onclick = () => switchSession(session.id);
+                    sessionListEl.appendChild(item);
+                });
+
+                // 默认选中第一个会话（如果还没有选中的会话）
+                if (sessions.length > 0 && !currentSessionId) {
+                    switchSession(sessions[0].id);
+                }
+            })
+            .catch(err => {
+                console.error('加载会话失败:', err);
+                showEmptyState(true);
+            });
+    }
+
+    // 切换会话 - 核心修复点
+    function switchSession(sessionId) {
+        if (!sessionId) return;
+
+        // 移除之前选中会话的active类
+        document.querySelectorAll('.session-item.active').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // 设置当前会话ID
+        currentSessionId = sessionId;
+        document.getElementById('current-session-id').value = sessionId;
+
+        // 给当前选中的会话添加active类
+        const activeItem = document.querySelector(`.session-item[data-session-id="${sessionId}"]`);
+        if (activeItem) {
+            activeItem.classList.add('active');
+        }
+
+        // 加载该会话的历史消息
+        loadSessionMessages(sessionId)
+            .then(() => {
+                // 确保聊天区域可见
+                showEmptyState(false);
+            })
+            .catch(err => {
+                console.error('加载会话消息失败:', err);
+                alert('无法加载会话内容，请重试');
+            });
+    }
+
+    // 创建新会话
+    function createNewSession() {
+        fetch('/sessions/new', { method: 'POST' })
+            .then(res => {
+                if (!res.ok) throw new Error('创建会话失败');
+                return res.json();
+            })
+            .then(session => {
+                if (session && session.id) {
+                    switchSession(session.id);
+                    loadSessions(); // 刷新会话列表
+                }
+            })
+            .catch(err => {
+                console.error('创建会话失败:', err);
+                alert('创建会话失败，请重试');
+            });
+    }
+
+    // 加载会话历史消息 - 返回Promise便于处理异步
+    function loadSessionMessages(sessionId) {
+        return new Promise((resolve, reject) => {
+            fetch(`/sessions/${sessionId}/messages`)
+                .then(res => {
+                    if (!res.ok) throw new Error('加载消息失败');
+                    return res.json();
+                })
+                .then(messages => {
+                    chatBoxEl.innerHTML = ''; // 清空当前聊天框
+                    messages.forEach(msg => {
+                        appendMessage(msg.content, msg.role === 'user' ? 'user-msg' : 'ai-msg');
+                    });
+                    resolve();
+                })
+                .catch(err => {
+                    console.error('加载消息失败:', err);
+                    reject(err);
+                });
+        });
+    }
+
+    // 发送消息处理
+    function handleFormSubmit(e) {
+        e.preventDefault();
+        const question = questionInputEl.value.trim();
+        if (!question || !currentSessionId) {
+            alert('请先创建会话再发送消息');
+            return;
+        }
+
+        // 显示用户消息
+        appendMessage(question, 'user-msg');
+        questionInputEl.value = '';
+
+        // 准备AI回复容器
+        const aiMessageContainer = document.createElement('div');
+        aiMessageContainer.className = 'message ai-msg';
+        chatBoxEl.appendChild(aiMessageContainer);
+        scrollToBottom();
+
+        // 发送请求（携带会话ID）
+        const eventSource = new EventSource(
+            `/chat/stream?question=${encodeURIComponent(question)}&sessionId=${currentSessionId}`
+        );
+
+        // 接收流式响应
+        eventSource.onmessage = function(event) {
+            if (event.data) {
+                aiMessageContainer.textContent += event.data;
+                scrollToBottom();
+            }
+        };
+
+        // 处理连接关闭 - 刷新会话列表以更新名称
+        eventSource.onerror = function() {
+            eventSource.close();
+            // 延迟刷新会话列表，确保后端已完成更新
+            setTimeout(loadSessions, 500);
+        };
+    }
+
+    // 辅助函数：添加消息到聊天框
+    function appendMessage(text, className) {
+        const msgContainer = document.createElement('div');
+        msgContainer.className = `message ${className}`;
+        msgContainer.textContent = text;
+        chatBoxEl.appendChild(msgContainer);
+        scrollToBottom();
+    }
+
+    // 辅助函数：滚动到聊天框底部
+    function scrollToBottom() {
+        chatBoxEl.scrollTop = chatBoxEl.scrollHeight;
+    }
+
+    // 辅助函数：格式化时间显示
+    function formatTime(timeStr) {
+        if (!timeStr) return '';
+
+        const date = new Date(timeStr);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffMins < 1) return '刚刚';
+        if (diffMins < 60) return `${diffMins}分钟前`;
+        if (diffHours < 24) return `${diffHours}小时前`;
+        if (diffDays < 7) return `${diffDays}天前`;
+
+        // 超过一周显示具体日期
+        return date.toLocaleDateString();
+    }
+
+    // 辅助函数：显示/隐藏空状态
+    function showEmptyState(show) {
+        emptyStateEl.style.display = show ? 'flex' : 'none';
+        chatBoxEl.style.display = show ? 'none' : 'block';
+        chatFormEl.style.display = show ? 'none' : 'flex';
+    }
+
+    // 辅助函数：防XSS攻击
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+</script>
+</body>
+</html>
